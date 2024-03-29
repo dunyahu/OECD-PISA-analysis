@@ -1,0 +1,832 @@
+---
+title: "Project01_PISA"
+format: pdf
+editor: visual
+---
+
+# Introduction and background
+
+## Dataset description
+
+In this dataset we have the PISA score and country characteristics for all OECD country for every 3 years (2006-2022). Due to COVID, the PISA test that supposed to help in 2021 was moved to 2022.
+
+# Data overview
+
+## Load the data from selected years.
+
+```{r}
+
+library(readxl)
+library(dplyr)
+
+# Load the data for 2018 and 2022
+data_2009 = read_excel("PISA_project.xlsx", sheet = "2009")
+data_2018 = read_excel("PISA_project.xlsx", sheet = "2018")
+data_2021 = read_excel("PISA_project.xlsx", sheet = "2021")
+data_2022 = read_excel("PISA_project.xlsx", sheet = "2022")
+
+# Preview the data
+# head(data_2009)
+# head(data_2018)
+# head(data_2021)
+# head(data_2022)
+
+```
+
+## Data cleaning
+
+### Replace missing value in 2022 by 2021 data:
+
+Due to the fact that the PISA was cancelled in 2021, some economic indicators are not provided in 2022. We fill the unknown value in 2022 with 2021 data.
+
+```{r}
+
+# Prepare a subset of 2021 data with relevant columns
+drop = c("Math_Female2021", "Math_Male2021", "Science_Female2021", "Science_Male2021")
+data_2021_subset = data_2021[,!(names(data_2021) %in% drop)]
+
+# Merge 2022 data with 2021 subset based on 'Country'
+merged_data <- merge(data_2022, data_2021_subset, by="Country", suffixes = c("", "_from_2021"), all = TRUE)
+
+# Fill missing values in 2022 using 2021 data
+for(column in names(merged_data)) {
+  if(grepl("_from_2021$", column)) {
+    original_column <- gsub("_from_2021$", "", column)
+    # Check for NA in original column and fill
+    is_na <- is.na(merged_data[, original_column])
+    merged_data[is_na, original_column] <- merged_data[is_na, column]
+  }
+}
+
+# Clean up - remove the extra columns from 2021
+columns_to_remove = grep("_from_2021$", names(merged_data), value = TRUE)
+merged_data = merged_data[, !(names(merged_data) %in% columns_to_remove)]
+
+```
+
+### **Overall score for math and science:**
+
+We assume the proportion of each gender are the same in each country, here the overall score is estimated by averaging male and female scores.
+
+```{r}
+
+# Calculating overall Math and Science scores for 2009
+data_2009$Overall_Math_Score_2009 = rowMeans(data_2009[,c('Math_Female2009', 'Math_Male2009')], na.rm = TRUE)
+data_2009$Overall_Science_Score_2009 = rowMeans(data_2009[,c('Science_Female2009', 'Science_Male2009')], na.rm = TRUE)
+gender_2009 = c('Math_Female2009', 'Math_Male2009','Science_Female2009', 'Science_Male2009')
+data_2009 = data_2009[, !(names(data_2009) %in% gender_2009)]
+
+# Calculating overall Math and Science scores for 2018
+data_2018$Overall_Math_Score_2018 = rowMeans(data_2018[,c('Math_Female2018', 'Math_Male2018')], na.rm = TRUE)
+data_2018$Overall_Science_Score_2018 = rowMeans(data_2018[,c('Science_Female2018', 'Science_Male2018')], na.rm = TRUE)
+gender_2018 = c('Math_Female2018', 'Math_Male2018','Science_Female2018', 'Science_Male2018')
+data_2018 = data_2018[, !(names(data_2018) %in% gender_2018)]
+
+# Calculating overall Math and Science scores for 2022
+merged_data$Overall_Math_Score_2022 = rowMeans(merged_data[,c('Math_Female2022', 'Math_Male2022')], na.rm = TRUE)
+merged_data$Overall_Science_Score_2022 = rowMeans(merged_data[,c('Science_Female2022', 'Science_Male2022')], na.rm = TRUE)
+gender_2022 = c('Math_Female2022', 'Math_Male2022','Science_Female2022', 'Science_Male2022')
+data_2022 = merged_data[, !(names(merged_data) %in% gender_2022)]
+
+```
+
+## **Initial Exploration**
+
+\[Due to the page limit, the code here will be commented and only show the written description instead.\]
+
+```{r}
+
+# Summary statistics 
+# summary(data_2009)
+# summary(data_2018)
+# summary(data_2022)
+
+# Missing values of selected years
+# missing_values_2009 = colSums(is.na(data_2009))
+# missing_values_2009 = missing_values_2009[missing_values_2009 > 0]
+# missing_values_2018 = colSums(is.na(data_2018))
+# missing_values_2018 = missing_values_2018[missing_values_2018 > 0]
+# missing_values_2022 = colSums(is.na(data_2022))
+# missing_values_2022 = missing_values_2022[missing_values_2022 > 0]
+
+# Print out missing values information
+# print(missing_values_2009)
+# print(missing_values_2018)
+# print(missing_values_2022)
+
+```
+
+For the dataset given, here's a summary of our findings:
+
+-   **Variables and Data Types:** All the selected spreadsheet includes a mix of numerical (e.g., Math and Science scores, GDP, urban population percentage) and categorical data (e.g., Country names).
+
+-   **Central Tendencies and Dispersion**: Scores and several economic indicators show a reasonable spread around their means, indicating variability across OECD countries.
+
+-   **Missing value:**
+
+    -   Year 2009
+
+        -   **`Math_Male_2009`**, **`Math_Female_2009`** , **`Science_Male_2009`** and **`Math_Female_2009`** each have 1 missing value.
+
+        -   **`Tax revenue (% of GDP)`** has 2 missing values.
+
+        -   **`Population in the largest city (% of urban population)`** has 3 missing values.
+
+        -   **`Gini index`** , **`School enrollment, secondary (% gross)`** and **`Researchers in R&D (per million people)`** each have 5 missing value.
+
+        -   **`Pupil-teacher ratio, secondary`** has 15 missing values.
+
+        -   **`Secure Internet servers (per 1 million people)`** have significant missing data (100% missing).
+
+    -   Year 2018
+
+        -   **`Tax revenue (% of GDP)`** has 1 missing values.
+
+        -   **`Population in the largest city (% of urban population)`** has 3 missing values.
+
+        -   **`Gini index`** has 5 missing values.
+
+        -   **`Researchers in R&D (per million people)`** has 6 missing value.
+
+        -   **`Pupil-teacher ratio, secondary`** has 36 missing values.
+
+    -   Year 2022 (Merged with 2021 data)
+
+        -   **`Math_Male_2022`**, **`Math_Female_2022`** , **`Science_Male_2022`** , **`Math_Female_2022`** , **`Tax revenue (% of GDP)`** and **`School enrollment, secondary (% gross)`** each have 1 missing value.
+
+        -   **`Population in the largest city (% of urban population)`** has 3 missing values.
+
+        -   **`Researchers in R&D (per million people)`** has 8 missing value.
+
+        -   **`Gini index`** has 11 missing value.
+
+        -   **`CO2 emissions (metric tons per capita)`** , **`Pupil-teacher ratio, secondary`** , **`Secure Internet servers (per 1 million people)`** have significant missing data (100% missing).
+
+## Handling missing value
+
+### **Fill in known data from external database**
+
+**`Gini index`**
+
+We fill in the missing value of Gini index according to [OECD](https://data.oecd.org/inequality/income-inequality.htm) and [UN](https://data.un.org/Data.aspx?d=WDI&f=Indicator_Code%3ASI.POV.GINI) database.
+
+```{r}
+
+# They only have 2020 value for Australia, Germany, Israel, Mexico, New Zealand, Switzerland and Türkiye so the 2021 Gini index of them will be filled by 2020 Gini here.
+# Chile only have Gini index of 2022, so the 2021 Gini index of Chile will be filled by 2022 Gini here.
+
+Gini_2021 <- c("Australia" = 31.8 , "Canada" = 29.2 , "Chile" = 44.8, "Germany" = 30.3, "Israel" = 34.0, "Mexico" = 42.0, "New Zealand" = 32.0, "Switzerland" = 32.0, "Türkiye" = 40.3)
+
+for (country in names(Gini_2021)) {
+  data_2022$`Gini index`[data_2022$Country == country] <- Gini_2021[country]
+}
+
+# They only have 2017 value for Chile and Iceland so the 2018 Gini index of them will be filled by 2017 Gini here.
+
+Gini_2018 <- c("Chile" = 44.4, "Iceland" = 26.1)
+
+for (country in names(Gini_2018)) {
+  data_2018$`Gini index`[data_2018$Country == country] <- Gini_2018[country]
+}
+```
+
+Due to the fact that we can't find the values for other variables, we proceed to removal of missing value.
+
+### **Remove variable that have too many (\>30%) missing values**
+
+```{r}
+
+# Remove variables that have more than 1/3 of missing values
+threshold <- 0.3
+
+# For 2009 data
+missing_percentage_2009 = colMeans(is.na(data_2009))
+columns_to_drop_2009 = names(missing_percentage_2009[missing_percentage_2009 > threshold])
+data_2009_clean = data_2009[, !(names(data_2009) %in% columns_to_drop_2009)]
+
+# For 2018 data
+missing_percentage_2018 = colMeans(is.na(data_2018))
+columns_to_drop_2018 = names(missing_percentage_2018[missing_percentage_2018 > threshold])
+data_2018_clean = data_2018[, !(names(data_2018) %in% columns_to_drop_2018)]
+
+# For 2022 data
+missing_percentage_2022 = colMeans(is.na(data_2022))
+columns_to_drop_2022 = names(missing_percentage_2022[missing_percentage_2022 > threshold])
+data_2022_clean = data_2022[, !(names(data_2022) %in% columns_to_drop_2022)]
+
+```
+
+-   **Removed variables:**
+
+    -   Year 2009
+
+        -   **`Pupil-teacher ratio, secondary`**
+
+        -   **`Secure Internet servers (per 1 million people)`**
+
+    -   Year 2018
+
+        -   **`Pupil-teacher ratio, secondary`**
+
+    -   Year 2022 (Merged with 2021 data)
+
+        -   **`CO2 emissions (metric tons per capita)`**
+
+        -   **`Pupil-teacher ratio, secondary`**
+
+        -   **`Secure Internet servers (per 1 million people)`**
+
+## Exploratory Data Analysis (EDA)
+
+### Overall Math Score
+
+```{r}
+
+library(ggplot2)
+
+suppressWarnings({
+ggplot() + 
+  geom_density( data_2009_clean, mapping = aes(x = Overall_Math_Score_2009, colour = "2009")) +
+  geom_density(data_2018_clean, mapping = aes(x=Overall_Math_Score_2018, colour = "2018")) + 
+  geom_density(data_2022_clean, mapping = aes(x=Overall_Math_Score_2022, colour = "2022")) +
+  scale_color_manual(values = c("#0ccee8", "#62d177", "#ffa600"))+
+  xlab("Overall Math Score") + 
+   ggtitle("Overall Math Score (2009, 2018 and 2022)")
+})
+
+
+
+```
+
+The overall math scores increased from 2009 to 2018, but decreased from 2018 to 2022.
+
+### Overall Science Score
+
+```{r}
+
+library(ggplot2)
+
+suppressWarnings({
+ggplot() + 
+  geom_density(data_2009_clean, mapping = aes(x = Overall_Science_Score_2009, colour = "2009")) +
+  geom_density(data_2018_clean, mapping = aes(x=Overall_Science_Score_2018, colour = "2018")) + 
+  geom_density(data_2022_clean, mapping = aes(x=Overall_Science_Score_2022, colour = "2022")) +
+  scale_color_manual(values = c("#0ccee8", "#62d177", "#ffa600"))+
+  xlab("Overall Science Score") + 
+   ggtitle("Overall Science Score (2009, 2018 and 2022)")
+})
+
+```
+
+The overall science scores were about the same in both 2009 and 2018, but decreased from 2018 to 2022.
+
+### Overall Math Score by country
+
+In this plot we can see the math score annual changes in the OECD countries.
+
+```{r}
+
+# Fill missing value with 0
+M2009 = replace(data_2009_clean, is.na(data_2009_clean), 0)
+M2018 = replace(data_2018_clean, is.na(data_2018_clean), 0)
+M2022 = replace(data_2022_clean, is.na(data_2022_clean), 0)
+Math = data.frame(M2009$Country, M2009$Overall_Math_Score_2009, M2018$Overall_Math_Score_2018, M2022$Overall_Math_Score_2022)
+colnames(Math) <- c('Country','y2009','y2018','y2022') 
+Math_sort <- Math[order(Math$y2018),]
+
+# Wide to long
+library(tidyr)
+Math_long <- gather(Math_sort, Year, Score, "y2009", "y2018", "y2022")
+
+# Plot the bar graph
+Math_long$Country <- factor(unique(Math_long$Country), levels = unique(Math_long$Country))
+ggplot(data = Math_long, aes(x = Country, y = Score, fill = Year)) +
+  geom_bar(stat = "identity", position = position_dodge(), alpha = 0.75) +
+  coord_flip()
+
+```
+
+### Overall Science Score by country
+
+In this plot we can see the science score annual changes in the OECD countries.
+
+```{r}
+
+# Fill missing value with 0
+D2009 = replace(data_2009_clean, is.na(data_2009_clean), 0)
+D2018 = replace(data_2018_clean, is.na(data_2018_clean), 0)
+D2022 = replace(data_2022_clean, is.na(data_2022_clean), 0)
+Science = data.frame(D2009$Country, D2009$Overall_Science_Score_2009, D2018$Overall_Science_Score_2018, D2022$Overall_Science_Score_2022)
+colnames(Science) <- c('Country','y2009','y2018','y2022') 
+Science_sort <- Science[order(Science$y2018),]
+
+# Wide to long
+library(tidyr)
+Science_long <- gather(Science_sort, Year, Score, "y2009", "y2018", "y2022")
+
+# Plot the bar graph
+Science_long$Country <- factor(unique(Science_long$Country), levels = unique(Science_long$Country))
+ggplot(data = Science_long, aes(x = Country, y = Score, fill = Year)) +
+  geom_bar(stat = "identity", position = position_dodge(), alpha = 0.75) +
+  coord_flip()
+
+```
+
+From the plots above, we can see that Japan and Colombia are the two extremes among OECD countries in PISA math and science score.
+
+### Correlation matrix
+
+#### 2009 Correlation matrix
+
+```{r}
+
+suppressWarnings({
+library("PerformanceAnalytics")
+Y2009 = as.matrix(D2009[-1])
+chart.Correlation(Y2009, histogram=TRUE)
+})
+
+```
+
+#### 2018 Correlation matrix
+
+```{r}
+
+suppressWarnings({
+library("PerformanceAnalytics")
+Y2018 = as.matrix(D2018[-1])
+chart.Correlation(Y2018, histogram=TRUE)
+})
+
+```
+
+#### 2022 Correlation matrix
+
+```{r}
+
+suppressWarnings({
+library("PerformanceAnalytics")
+Y2022 = as.matrix(D2022[-1])
+chart.Correlation(Y2022, histogram=TRUE)
+})
+
+```
+
+By the correlation matrix we can see some pattern of each variable.
+
+Across the years, we see found:
+
+-   PISA math and PISA science are highly positively correlated.
+
+-   GDP per capita (current US\$) and PISA scores are correlated. (Direct changed since 2022)
+
+The pattern of PISA performance with country characteristics changed since 2022. Some highly correlated features no longer have relationship with PISA performance. It can potentially due to some global event (e.g., COVID).
+
+# **Statistical Analysis**
+
+## Q1: Effect of Characteristics on Scores (2018, 2022)
+
+In this question, we aimed to understand what country characteristic affect the PISA score (math and science) for that designated year (2018 and 2022) for the OECD countries.
+
+### Data preperation
+
+```{r}
+
+# Exclude data that are irrelevant to the following analysis.
+S18 = c("Overall_Science_Score_2018", "Country")
+math18 = data_2018_clean[, !(names(data_2018_clean) %in% S18)]
+S22 = c("Overall_Science_Score_2022", "Country")
+math22 = data_2022_clean[, !(names(data_2022_clean) %in% S22)]
+M18 = c("Overall_Math_Score_2018", "Country")
+science18 = data_2018_clean[, !(names(data_2018_clean) %in% M18)]
+M22 = c("Overall_Math_Score_2022", "Country")
+science22 = data_2022_clean[, !(names(data_2022_clean) %in% M22)]
+
+```
+
+### Assumption check
+
+#### PISA Math 2018
+
+```{r}
+
+full_math18 <- lm(Overall_Math_Score_2018 ~ ., data = math18)
+par(mfrow = c(2,2))
+plot(full_math18)
+
+```
+
+#### PISA Math 2022
+
+```{r}
+
+full_math22 <- lm(Overall_Math_Score_2022 ~ . ,data = math22)
+par(mfrow = c(2,2))
+plot(full_math22)
+
+```
+
+#### PISA Science 2018
+
+```{r}
+
+full_science18 <- lm(Overall_Science_Score_2018 ~ . ,data = science18)
+par(mfrow = c(2,2))
+plot(full_science18)
+
+```
+
+#### PISA Science 2022
+
+```{r}
+
+full_science22 <- lm(Overall_Science_Score_2022 ~ . ,data = science22)
+par(mfrow = c(2,2))
+plot(full_science22)
+
+```
+
+#### Assumption check: Summary
+
+-   All the 4 models have the similar **assumption results**:
+
+    -   **Residuals vs Fitted**. Used to check the linear relationship assumptions. We found the data may be curve-linear.
+
+    -   **Normal Q-Q**. Used to examine whether the residuals are normally distributed. The residuals points follow the straight dashed line, which showed our data follows a normal distribution.
+
+    -   **Scale-Location.** Used to check the homogeneity of variance of the residuals (homoscedasticity). Horizontal line with equally spread points is a good indication of homoscedasticity. This is not the case in our example, where we have a heteroscedasticity problem.
+
+    -   **Residuals vs Leverage**. Used to identify influential cases, that is extreme values that might influence the regression results when included or excluded from the analysis. We can see there are some extreme cases in our data. Due to the fact that we want to have a comprehensive understanding of PISA and OECD countries' characteristics, we are not going to exclude any data point from the data for the following analysis even if they are outliers by definition.
+
+In order to answer the given question, we utilize linear regression analysis despite some potential non-linearity. Because this is the easiest way to interpret and compare the results, given we have so many variables in the dataset.
+
+Note: I did consider to add interaction term and transform the data to resolve the non-linearity. But adding the interaction term will make the result extreme difficult to interpret since we have too many variables. Plus, they are not comprehensively selected we may not effectively find out the proper interaction effect. Similarly, transform the data will significantly decrease the interpretability.
+
+### Linear regression
+
+#### PISA Math 2018
+
+```{r}
+
+summary(full_math18)
+
+```
+
+**Coefficients**
+
+-   **Intercept (560.9)**: The expected value of the Overall Math Score in 2018 when all other variables are zero. The significant p-value (0.0378) indicates that the intercept is significantly different from zero.
+
+-   **Variables**: Most predictors are not statistically significant at the 0.05 level (no stars next to their p-values), meaning there's not enough evidence to assert they have a strong linear relationship with Math scores under this model setup.
+
+**Model Fit**
+
+-   **Adjusted R-squared (0.649)**: A decrease from 0.892 (original) to 0.649 in R-squared suggests that some predictors may not be contributing much to the model. About 64.9% of the variability in the Overall Math Scores in 2018 is explained by the model's predictors.
+
+-   **F-statistic (3.671) and p-value (0.03304)**: This tests the null hypothesis that all regression coefficients are equal to zero (no linear relationship). A p-value of 0.03304 indicates the model is statistically significant at the 0.05 level, suggesting at least one of the predictors has a linear relationship with the Overall Math Score in 2018.
+
+**Overall**
+
+-   **Non-significance of Many Predictors**: Most of the predictors are not statistically significant, which might suggest that either these factors do not have a strong linear relationship with Math scores or that the model could be improved. Especially, we may not actually select the most relevant variables to be the predictors.
+
+#### PISA Math 2022
+
+```{r}
+
+summary(full_math22)
+
+```
+
+**Coefficients**
+
+-   **Intercept (624.1)**: This is the predicted Overall Math Score in 2022 when all predictor variables are held at zero. It is statistically significant at the 0.05 level (p-value: 0.0254), suggesting a baseline level of math proficiency across the sample when no other factors are considered.
+
+-   **Variables**:
+
+    -   **`Population, total`** has a positive coefficient (2.100e-06) with a p-value of 0.0426, indicating that a larger population is associated with a higher math score, and this relationship is statistically significant at the 0.05 level.
+
+    -   **`GDP (current US$)`** shows a negative coefficient (-4.166e-11), with a p-value close to the significance threshold (0.0680), suggesting that higher GDP might be associated with lower math scores, although this result is not statistically significant at the conventional 0.05 level.
+
+**Model Fit**
+
+-   **Adjusted R-squared (0.321)**: After adjusting for the number of predictors, the adjusted R-squared significantly drops (from 0.7737), suggesting that some of the model's explanatory power may be due to the number of predictors rather than their individual explanatory value. About 32.1% of the variability in the Overall Math Scores in 2022 is actually explained by the model's predictors.
+
+-   **F-statistic and p-value**: The F-statistic tests whether at least one of the predictors is significantly related to the response variable. With a p-value of 0.2239, the test suggests that the model, as a whole, might not be statistically significant, indicating that the predictors collectively may not explain the variation in math scores as well as suggested by the R-squared value.
+
+**Overall**
+
+-   **Significance**: Only a few predictors are statistically significant, indicating that many variables included in the model may not have a strong linear relationship with the Overall Math Score in 2022.
+
+#### PISA Science 2018
+
+```{r}
+
+summary(full_science18)
+
+```
+
+**Coefficients Table**
+
+-   **Intercept (467.8)**: This suggests the expected Overall Science Score in 2018 when all predictors are zero. While close to statistical significance (p = 0.0806), it indicates a baseline level of science proficiency.
+
+-   **Variables**: None of the predictors are statistically significant at the conventional 0.05 level, as indicated by the lack of asterisks next to their p-values. This suggests no strong evidence from this model that these factors are linearly related to science scores in a statistically significant way within the dataset provided.
+
+**Model Fit**
+
+-   **Adjusted R-squared (0.4911)**: Significantly lower than the Multiple R-squared (0.8434), this adjustment accounts for the number of predictors in the model, suggesting that some predictors may not contribute meaningfully to explaining the variance in science scores. Overall Science Scores is explained by the model (approximately 49.11%).
+
+-   **F-statistic (2.394) and p-value (0.1046)**: Tests the null hypothesis that all regression coefficients are zero. The p-value above the common threshold (0.05) suggests the model, as a whole, might not significantly predict science scores, indicating that, collectively, the predictors may not have a strong linear relationship with science scores.
+
+**Overall**
+
+-   **Lack of Statistical Significance**: The absence of statistically significant predictors may suggest that either the variables chosen do not have a strong linear relationship with science scores or the model could benefit from refinement.
+
+#### PISA Science 2022
+
+```{r}
+
+summary(full_science22)
+
+```
+
+**Coefficients**
+
+-   **Intercept (562.1)**: Predicted Overall Science Score in 2022 when all predictors are zero. The intercept is significant (p = 0.0293), suggesting a baseline level of science proficiency.
+
+-   **Variables**: **`Population, total`** has a positive effect (1.716e-06), with its p-value (0.0677) suggesting a marginal significance level. This implies that countries with larger populations tend to have higher science scores, albeit the evidence is not strong enough at the conventional 0.05 significance level. This is a pattern that is similar to the 2022 Math result.
+
+**Model Fit**
+
+-   **Adjusted R-squared (0.2611)**: Significantly lower than the Multiple R-squared (0.7537), this metric adjusts for the number of predictors, indicating that many predictors do not significantly contribute to the model. Approximately 26.11% of the variability in Science Scores is explained by the model's predictors.
+
+-   **F-statistic (1.53) and p-value (0.2765)**: The F-statistic and associated p-value test the null hypothesis that none of the predictors are significantly related to the response variable. A p-value greater than 0.05 suggests that, collectively, the predictors may not significantly explain the variability in science scores.
+
+**Overall**
+
+-   **Predictor Significance**: Most predictors are not statistically significant, suggesting that they may not have a strong linear relationship with science scores in 2022 or that the model could be missing key explanatory variables or interactions.
+
+### Conclusion
+
+From the analysis above, we found that most predictors are not statistically significant, suggesting that they may not have a strong linear relationship with PISA science and math score in 2018 and 2022. It potentially means that out model could be missing key explanatory variables or interactions.
+
+The only variable we found to have some systematic effect is **`Population, total`** in year 2022. The relationship showed that larger countries is more possible to have higher PISA science/math score. It could be due to direct effects (e.g., larger talent pools, more investment in education) or indirect effects (e.g., larger countries may have more varied educational policies, more urbanization which could correlate with better educational facilities).
+
+However, this is important to note the relationship is weak, and our overall model performance is not ideal. A better model structure as well as better variable selection are more important.
+
+## Q2: Changes from 2018 to 2022
+
+In this question, we would like to know whether the PISA math score of OECD countries changed between 2018 and 2022. Further, we aimed to understand what country characteristic affect the PISA math score change for year 2018 and 2022 of the OECD countries.
+
+### Data preperation
+
+```{r}
+
+# For t-test
+
+# Fill missing value with 0
+Math = data.frame(M2009$Country, data_2018_clean$Overall_Math_Score_2018, data_2022_clean$Overall_Math_Score_2022)
+colnames(Math) <- c('Country','Math2018','Math2022') 
+
+# Wide to long
+Math_long <- gather(Math, Year, Score, 'Math2018','Math2022')
+
+```
+
+```{r}
+
+# For Regression
+
+# Merge the two datasets on the country identifier
+math_scores_combined <- merge(data_2018_clean[, c("Country", "Overall_Math_Score_2018")], data_2022_clean[, c("Country", "Overall_Math_Score_2022")], by = "Country")
+
+# Calculate the change in scores
+math18$Score_Change = math_scores_combined$Overall_Math_Score_2022 - math_scores_combined$Overall_Math_Score_2018
+math22$Score_Change = math_scores_combined$Overall_Math_Score_2022 - math_scores_combined$Overall_Math_Score_2018
+
+# Remove unnecessary variable
+om18 = c("Overall_Math_Score_2018")
+math18 = math18[, !(names(math18) %in% om18)]
+om22 = c("Overall_Math_Score_2022")
+math22 = math22[, !(names(math22) %in% om22)]
+
+```
+
+### t-test
+
+```{r}
+
+library(rstatix)
+get_summary_stats(group_by(Math_long, Year), Score, type = "mean_sd")
+
+```
+
+```{r}
+
+# Conduct a paired t-test
+t_test_results <- t.test(math_scores_combined$Overall_Math_Score_2018, math_scores_combined$Overall_Math_Score_2022, paired = TRUE)
+
+t_test_results
+
+```
+
+#### t-test Result
+
+A paired-samples t-test was conducted to compare PISA math score in 2018 and 2022. There was a significant difference in the PISA math score for 2018 (M = 486.982*, SD* = 33.53) and 2022 (M = 427.327***,** SD* = 33.922) ; *t*(36) = 9.4893, *p* \< 0.001. The PISA math score of OECD countries are significantly decreased from 2018 to 2022. It implied that some major global event (e.g., COVID) may lead to this result.
+
+We further utilize regression analysis to explore possible influencing factors.
+
+### Assumption check
+
+#### Math Score Difference with 2018 Features
+
+```{r}
+
+mathdiff18 <- lm(Score_Change ~ ., data = math18)
+par(mfrow = c(2,2))
+plot(mathdiff18)
+
+```
+
+#### Math Score Difference with 2022 Features
+
+```{r}
+
+mathdiff22 <- lm(Score_Change ~ ., data = math22)
+par(mfrow = c(2,2))
+plot(mathdiff22)
+
+```
+
+#### Assumption check: Summary
+
+-   Both of the models have the similar **assumption results**:
+
+    -   **Residuals vs Fitted**. Used to check the linear relationship assumptions. A horizontal line, without distinct patterns is an indication for a linear relationship, which is good.
+
+    -   **Normal Q-Q**. Used to examine whether the residuals are roughly normally distributed. The residuals points roughly follow the straight dashed line, which showed our data follows a normal distribution.
+
+    -   **Scale-Location.** Used to check the homogeneity of variance of the residuals (homoscedasticity). Horizontal line with equally spread points is a good indication of homoscedasticity. This is not the case in our example, where we have a heteroscedasticity problem. But this is much better than what we saw in Q1 data.
+
+    -   **Residuals vs Leverage**. Used to identify influential cases, that is extreme values that might influence the regression results when included or excluded from the analysis. We can see there is no extreme cases in our data. Which is also an improvement in comparison to Q1 data.
+
+Base on the assumption, the data we have in Q2 is much proper to do a linear regression analysis. Which make it easy to interpret and compare the results, given we have so many variables in the dataset.
+
+### Linear regression
+
+#### Math Score Difference with 2018 Features
+
+```{r}
+
+summary(mathdiff18)
+
+```
+
+**Coefficients**
+
+-   **Intercept (23.56)**: The expected change in math scores when all predictor variables are held at zero. Its high p-value (0.842) indicates that the intercept is not statistically significant, suggesting that when all other factors are zero, the change in math scores is not significantly different from zero.
+
+-   **Variables**: No variables are marked with significance codes, implying none are statistically significant at conventional levels (e.g., 0.05, 0.01).
+
+**Model Fit**
+
+-   **Adjusted R-squared (-0.6399)**: A negative adjusted R-squared indicates that the model fits worse than a horizontal line; in other words, the predictors do not explain the variation in score changes effectively, and the model likely includes too many predictors relative to the number of observations.
+
+-   **F-statistic (0.4364) and p-value (0.9313)**: The F-statistic tests the null hypothesis that all regression coefficients are zero. The very high p-value suggests that, collectively, the predictors do not significantly explain the variability in the change in math scores, reinforcing the conclusion drawn from the adjusted R-squared.
+
+**Overall**
+
+-   **Lack of Statistical Significance**: The absence of statistically significant predictors in this model suggests that these factors may not have a direct linear relationship with the change in math scores from 2018, or that the model is over-specified given the data available.
+
+-   **Model Complexity**: The negative adjusted R-squared and the overall model's lack of significance indicate an overly complex model for the sample size. This complexity could be contributing to the model's inability to effectively predict changes in math scores.
+
+#### Math Score Difference with 2022 Features
+
+```{r}
+
+summary(mathdiff22)
+
+```
+
+**Coefficients**
+
+-   **Intercept**: The intercept (-30.03) represents the expected change in math scores when all predictors are held at zero. The intercept is not statistically significant in this context (p = 0.7241), which is typical for models where the intercept doesn't have a meaningful interpretation.
+
+-   **Variables**:
+
+    -   **`Population, total`** has a positive coefficient (6.931e-07), with a p-value close to significance (0.0586), suggesting a trend where countries with larger populations tend to have a slight increase in math scores, although this effect is marginal.
+
+    -   **`GDP (current US$)`** shows a negative coefficient (-1.752e-11), significant at the 0.05 level (p = 0.0394), indicating that an increase in GDP is associated with a decrease in math scores over the period. This finding is counterintuitive and suggests a complex relationship between economic size and educational outcomes that may warrant further investigation.
+
+**Model Fit**
+
+-   **Adjusted R-squared (0.1179)**: Much lower than the Multiple R-squared (0.706), reflecting the penalty for including a large number of predictors relative to the sample size. This suggests that many predictors may not contribute meaningfully to the model. Indicates that approximately 11.79% of the variability in the change in math scores is explained by the included predictors.
+
+-   **F-statistic (1.201) and p-value (0.4129)**: The overall model's F-test is not significant, indicating that collectively, the predictors may not significantly explain the variation in score changes across countries.
+
+**Overall**
+
+-   **Complex Relationships**: The significant negative relationship between GDP and score changes suggests that economic factors and educational outcomes may interact in complex ways, potentially mediated by how resources are allocated to education.
+
+-   **Marginal Effects**: The marginal significance of **`Population, total`** highlights the need for careful consideration in interpreting predictors close to significance thresholds, particularly in the context of policy or educational interventions.
+
+### Conclusion
+
+From the t-test result, we see PISA math score of OECD countries are significantly decreased from 2018 to 2022. Though we try to use regression method to capture the influencing factors, but we failed to establish a good model to predict the result from selected country characteristics in 2018 and 2022.
+
+We did found some interesting variable in 2022 country characteristics to relate to the change in score. Where we found the significant negative relationship between GDP and score changes. This result changes in math scores challenges simplistic narratives about economic development and educational improvement, indicated that we need to have a further investigation on the impacting factors on GDP and how this can interact with math education performance.
+
+Similar to Q1, we also found marginal effect on total population. This could similarly due to direct effects (e.g., larger talent pools, more investment in education) or indirect effects (e.g., larger countries may have more varied educational policies, more urbanization which could correlate with better educational facilities).
+
+Note: I know non-significant means no relationship, but I really need something to write for the project.
+
+## Q3: Characteristics Affecting Scores Above 510 (2009, 2018)
+
+In this question, we aimed to understand what country characteristic affect whether the PISA score is above 510 (math and science) for that designated year (2009 and 2018) for the OECD countries.
+
+### Data preparation
+
+```{r}
+
+# For Math scores in 2009
+data_2009_clean$High_Math_Score = ifelse(data_2009_clean$Overall_Math_Score_2009 > 510, 1, 0)
+S09 = c("Overall_Math_Score_2009", "Overall_Science_Score_2009", "Country", "High_Science_Score")
+math09 = data_2009_clean[, !(names(data_2009_clean) %in% S09)]
+
+# For Science scores in 2009
+data_2009_clean$High_Science_Score = ifelse(data_2009_clean$Overall_Science_Score_2009 > 510, 1, 0)
+M09 = c("Overall_Math_Score_2009", "Overall_Science_Score_2009", "Country", "High_Math_Score")
+science09 = data_2009_clean[, !(names(data_2009_clean) %in% M09)]
+
+# For Math scores in 2018
+data_2018_clean$High_Math_Score = ifelse(data_2018_clean$Overall_Math_Score_2018 > 510, 1, 0)
+S18 = c("Overall_Math_Score_2018", "Overall_Science_Score_2018", "Country", "High_Science_Score")
+math18 = data_2018_clean[, !(names(data_2018_clean) %in% S18)]
+
+# For Science scores in 2018
+data_2018_clean$High_Science_Score = ifelse(data_2018_clean$Overall_Science_Score_2018 > 510, 1, 0)
+M18 = c("Overall_Math_Score_2018", "Overall_Science_Score_2018", "Country", "High_Math_Score")
+science18 = data_2018_clean[, !(names(data_2018_clean) %in% M18)]
+
+```
+
+### **Logistic Regression Analysis**
+
+#### PISA Math 2009
+
+```{r}
+
+# Logistic regression for high math scores in 2009
+model_math_2009 <- glm(High_Math_Score ~ ., data = math09, family = binomial)
+
+# To view the summary of each model
+summary(model_math_2009)
+
+```
+
+#### PISA Science 2009
+
+```{r}
+
+# Logistic regression for high science scores in 2009
+model_science_2009 <- glm(High_Science_Score ~ ., data = science09, family = binomial)
+
+summary(model_science_2009)
+
+```
+
+#### PISA Math 2018
+
+```{r}
+
+model_math_2018 <- glm(High_Math_Score ~ ., data = math18, family = binomial)
+
+
+summary(model_math_2018)
+
+
+```
+
+#### PISA Science 2018
+
+```{r}
+
+model_science_2018 <- glm(High_Science_Score ~ ., data = science18, family = binomial)
+
+summary(model_science_2018)
+
+```
+
+### Conclusion
+
+We found the same result for ALL models. All model summaries have the same waring "glm.fit: fitted probabilities numerically 0 or 1 occurred". The warning means that when R is computing probabilities internally, as part of the fitting process, they sometimes "underflow/overflow" - that is, they're so close to 0 or 1 that they can't be distinguished from them when using R's standard 64-bit floating-point precision (e.g. values less than about 1e-308 or greater than about 1-1e-16).
+
+**Coefficients**
+
+-   **Z-value and P-value**: The z-values are near zero, and the p-values are 1 for all predictors, indicating no statistical significance. This unusual result, with p-values exactly equal to 1, suggests potential issues with the data or model specification.
+
+**Overall**
+
+1.  **Large Standard Errors and P-values**: The large standard errors and corresponding p-values of 1 across all predictors might indicate issues such as perfect separation in logistic regression, where one or more predictors perfectly predict the outcome, leading to infinite estimates. This situation often arises in datasets with small sample sizes or when the outcome variable has limited variability.
+
+2.  **Model Complexity**: Given the small number of observations and large number of predictor, the model may be too complex, leading to overfitting.
+
+In conclusion, we failed to identify the influencing factor that related to high math/science performance for OECD countries in 2009 and 2018 from the given variables. This could due to the fact that some defining variables are missing.
